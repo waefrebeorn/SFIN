@@ -2121,20 +2121,18 @@ def main(mode="train", use_hyperopt=False, generation_examples=True, load_checkp
             # Extract text from dataset
             texts = []
             for ex in dataset_raw:
-                if "messages" in ex:
-                    # Extract the conversation text from messages
-                    conversation = ""
-                    for msg in ex["messages"]:
-                        role = msg["role"]
-                        content = msg["content"]
-                        conversation += f"{role}: {content}\n"
-                    texts.append(conversation)
+                if "text" in ex:
+                    texts.append(ex["text"])
+                elif "instruction" in ex:
+                    texts.append(ex["instruction"])
+                elif "conversation" in ex:
+                    texts.append(ex["conversation"])
                 else:
                     # As a fallback, try to concatenate all string fields
                     combined = " ".join(str(v) for v in ex.values() if isinstance(v, str))
                     if combined:
                         texts.append(combined)
-                        
+            
             logger.info(f"Loaded {len(texts)} conversations.")
             
             # Filter out very short texts
