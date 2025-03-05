@@ -1,0 +1,42 @@
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# PyCharm & VSCode
+.idea/
+.vscode/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# SFIN project specific
+checkpoints/
+visualizations/
+runs/
+optuna/
+*.log
+*.pt
+*.bin
+*.pkl
+
+# TensorBoard
+runs/
+
+# Don't track large datasets
+datasets/

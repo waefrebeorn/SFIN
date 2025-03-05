@@ -1,0 +1,10 @@
+transformers
+datasets
+tqdm
+numpy
+scikit-learn
+matplotlib
+optuna
+tensorboard
+scipy
+accelerate
