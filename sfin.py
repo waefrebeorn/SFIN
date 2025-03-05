@@ -66,6 +66,39 @@ if config["use_tensorboard"]:
 #                     QUANTUM & HELPER FUNCTIONS                              #
 ###############################################################################
 
+def update_entangled_interference_layer(model):
+    """
+    Dynamically patch the EntangledInterferenceLayer to enhance quantum effects.
+    Call this function after model creation but before training.
+    
+    Args:
+        model: The SFIN model to enhance
+        
+    Returns:
+        model: The enhanced model
+    """
+    for name, module in model.named_modules():
+        if isinstance(module, EntangledInterferenceLayer):
+            # Enhance quantum noise
+            if hasattr(module, 'noise_scale'):
+                module.noise_scale = 0.15
+                
+            # Ensure entanglement is used
+            if hasattr(module, 'use_entanglement'):
+                module.use_entanglement = True
+                
+            # Enhance phase shifts for more quantum interference
+            if hasattr(module, 'phase_shifts'):
+                nn.init.uniform_(module.phase_shifts, -0.1, 0.1)
+                
+            # Set adaptive attention to True for dynamic attention scaling
+            if hasattr(module, 'adaptive_attention'):
+                module.adaptive_attention = True
+                
+            logger.info(f"Enhanced quantum effects for {name}")
+            
+    return model
+
 def add_quantum_noise(tensor, noise_prob=0.05, noise_scale=0.1, noise_type="phase_and_amplitude"):
     """
     Inject quantum-inspired noise:
@@ -654,11 +687,11 @@ class CrossModalFusion(nn.Module):
 
 class AdvancedWaveFunctionCollapse(nn.Module):
     """
-    Advanced collapse mechanism with curriculum learning support
-    and multiple collapse strategies.
+    Advanced collapse mechanism with enhanced quantum interference support,
+    curriculum learning, and multiple collapse strategies.
     """
-    def __init__(self, dim, vocab_size, collapse_type="squared_magnitude", 
-                 use_mixtures=True, num_mixtures=2):
+    def __init__(self, dim, vocab_size, collapse_type="interference", 
+                 use_mixtures=True, num_mixtures=3):  # Increased mixtures for quantum
         super().__init__()
         self.dim = dim
         self.vocab_size = vocab_size
@@ -677,46 +710,75 @@ class AdvancedWaveFunctionCollapse(nn.Module):
             self.mixture_components = nn.ModuleList([
                 nn.Linear(dim, vocab_size) for _ in range(num_mixtures)
             ])
-        self.register_buffer('real_scale', torch.ones(1))
-        self.register_buffer('imag_scale', torch.ones(1))
-        self.register_buffer('interference_scale', torch.ones(1))
+            
+        # Default scales for collapse components
+        self.register_buffer('real_scale', torch.ones(1) * 1.2)  # Increased real scale
+        self.register_buffer('imag_scale', torch.ones(1) * 0.8)  # Decreased imag scale
+        self.register_buffer('interference_scale', torch.ones(1) * 1.5)  # Increased interference scale
+        
+        # Additional non-linearity for quantum effects
+        self.activation = nn.LeakyReLU(0.1)
         
     def forward(self, x):
         real, imag = x
         batch_size, seq_len, _ = real.shape
-        real_logits = self.real_collapse(real) * self.real_scale
-        imag_logits = self.imag_collapse(imag) * self.imag_scale
+        
+        # Apply non-linearity for enhanced quantum effects
+        real_act = self.activation(real)
+        imag_act = self.activation(imag)
+        
+        real_logits = self.real_collapse(real_act) * self.real_scale
+        imag_logits = self.imag_collapse(imag_act) * self.imag_scale
+        
         if self.collapse_type == "squared_magnitude":
             density = real_logits**2 + imag_logits**2
         elif self.collapse_type == "interference":
-            interference_term = self.interference_collapse(real * imag) * self.interference_scale
-            density = real_logits**2 + imag_logits**2 + interference_term
+            # Enhanced interference term
+            interference_term = self.interference_collapse(real_act * imag_act) * self.interference_scale
+            # Cross-phase term to model quantum effects
+            phase_term = torch.sin(real_logits) * torch.cos(imag_logits)
+            density = real_logits**2 + imag_logits**2 + interference_term + phase_term * 0.3
         elif self.collapse_type == "entanglement":
             if hasattr(self, 'entangle_u'):
-                entangled = torch.matmul(real, torch.matmul(self.entangle_u, self.entangle_v))
+                entangled = torch.matmul(real_act, torch.matmul(self.entangle_u, self.entangle_v))
             else:
-                entangled = torch.matmul(real, self.entanglement_weights)
-            entanglement_term = torch.sum(entangled * imag, dim=-1, keepdim=True)
+                entangled = torch.matmul(real_act, self.entanglement_weights)
+            entanglement_term = torch.sum(entangled * imag_act, dim=-1, keepdim=True)
             density = real_logits**2 + imag_logits**2 + entanglement_term
         elif self.collapse_type == "born_rule":
             amplitude = torch.complex(real_logits, imag_logits)
             density = torch.abs(amplitude)**2
         else:
             density = real_logits + imag_logits
+            
         if self.use_mixtures:
-            mix_weights = F.softmax(self.mixture_weights(real), dim=-1)
+            # Use softmax with temperature for sharper mixture weights
+            temp = 0.8
+            mix_weights = F.softmax(self.mixture_weights(real_act) / temp, dim=-1)
             mixture_logits = 0
             for i, component in enumerate(self.mixture_components):
-                component_logits = component(real + imag)
+                if i == 0:
+                    # First component uses real
+                    component_logits = component(real_act)
+                elif i == 1:
+                    # Second component uses imag
+                    component_logits = component(imag_act)
+                else:
+                    # Other components use combinations
+                    component_logits = component(real_act + imag_act * (i % 2 * 2 - 1))
+                
                 component_weight = mix_weights[:, :, i:i+1]
                 mixture_logits += component_weight * component_logits
+                
             if hasattr(self, 'mixture_alpha'):
                 alpha = self.mixture_alpha
             else:
-                alpha = 0.5
+                alpha = 0.6  # Increased mixture influence for quantum
+                
             density = (1 - alpha) * density + alpha * mixture_logits
+            
         return F.relu(density) + 1e-10
-
+        
 class MemoryModule(nn.Module):
     """
     Enhanced memory module with attention-based read/write operations,
@@ -2020,7 +2082,7 @@ class ExplainabilityTools:
 def main(mode="train", use_hyperopt=False, generation_examples=True, load_checkpoint=None):
     """
     Main function to run training, evaluation, or generation with improved error handling.
-    Updated to control memory module usage during training.
+    Updated to focus on quantum interference mechanisms.
     
     Args:
         mode: "train", "evaluate", "generate", or "explain"
@@ -2036,18 +2098,18 @@ def main(mode="train", use_hyperopt=False, generation_examples=True, load_checkp
         vocab_size = tokenizer.vocab_size
         logger.info(f"Initialized tokenizer with vocabulary size: {vocab_size}")
         
-        # Default model configuration
+        # Quantum-focused model configuration
         model_args = {
             "vocab_size": vocab_size,
             "dim": 768,
-            "depth": 6,
-            "heads": 12,
-            "dropout": 0.1,
-            "interference_type": "quantum",
-            "collapse_type": "squared_magnitude",
+            "depth": 7,
+            "heads": 8,
+            "dropout": 0.15,
+            "interference_type": "quantum",  # Explicitly use quantum interference
+            "collapse_type": "interference",  # Use interference-based collapse
             "max_seq_len": 256,
             "mem_size": 32,
-            "use_hierarchical": True
+            "use_hierarchical": True  # Enable hierarchical processing
         }
         
         # Load dataset
@@ -2101,7 +2163,7 @@ def main(mode="train", use_hyperopt=False, generation_examples=True, load_checkp
                 logger.info("Creating new model instead")
                 model = AdvancedSFIN(**model_args).to(device)
         else:
-            logger.info("Creating new model with default parameters")
+            logger.info("Creating new quantum-focused model with optimized parameters")
             model = AdvancedSFIN(**model_args).to(device)
         
         # Log model size
@@ -2115,12 +2177,12 @@ def main(mode="train", use_hyperopt=False, generation_examples=True, load_checkp
                 # Try to estimate available GPU memory and adjust batch size accordingly
                 free_mem = torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated(0)
                 # Start with a smaller batch size to avoid memory issues
-                suggested_batch_size = max(1, min(8, int(free_mem / (1024**3 * 0.7))))
+                suggested_batch_size = max(1, min(6, int(free_mem / (1024**3 * 0.8))))
                 batch_size = suggested_batch_size
                 logger.info(f"Automatically selected batch size: {batch_size} based on available GPU memory")
             except:
-                # Fallback to safe default
-                batch_size = 2  # Reduced from 4 to be safer with complex model
+                # Fallback to safe default - reduced for quantum mode
+                batch_size = 4  # Smaller batch size for quantum interference
                 logger.info(f"Using default safe batch size: {batch_size}")
         else:
             # CPU mode - keep batch size small
@@ -2149,34 +2211,52 @@ def main(mode="train", use_hyperopt=False, generation_examples=True, load_checkp
         
         # Execute requested mode
         if mode == "train":
-            logger.info("Starting model training")
+            logger.info("Starting quantum model training")
             
-            # Disable memory operations during training to avoid backward pass issues
+            # Apply quantum enhancements to the model
+            model = update_entangled_interference_layer(model)
+            
+            # Modify training parameters for quantum focus
+            for layer in model.modules():
+                if hasattr(layer, 'noise_scale'):
+                    layer.noise_scale = 0.15  # Increase quantum noise
+                if hasattr(layer, 'use_entanglement'):
+                    layer.use_entanglement = True  # Ensure entanglement is enabled
+            
+            # Enable memory operations during inference but disable during training
             enable_memory = False
             logger.info(f"Memory module usage during training: {'Enabled' if enable_memory else 'Disabled'}")
             
             # Use gradient accumulation to compensate for small batch size
-            grad_accum_steps = max(1, 16 // batch_size)
+            grad_accum_steps = max(1, 8 // batch_size)
             logger.info(f"Using gradient accumulation steps: {grad_accum_steps}")
             
             train_model(
                 model, 
                 train_loader, 
                 eval_dataloader=eval_loader, 
-                epochs=3, 
-                lr=5e-5,
-                warmup_steps=100, 
+                epochs=15,  # Train longer with quantum settings 
+                lr=6e-5,    # Learning rate from best quantum trial
+                warmup_steps=500, 
                 fp16=torch.cuda.is_available(), 
                 log_interval=10, 
-                save_interval=200, 
-                eval_interval=100,
+                save_interval=100, 
+                eval_interval=50,
                 adaptive_training=True,
                 enable_memory=enable_memory,
-                gradient_accumulation_steps=grad_accum_steps
+                gradient_accumulation_steps=grad_accum_steps,
+                scheduler_type="cosine",  # Use cosine scheduler for better convergence
+                weight_decay=0.01,
+                max_grad_norm=1.0,
+                early_stopping_patience=5  # More patience for quantum training
             )
         
         elif mode == "evaluate":
-            logger.info("Evaluating model")
+            logger.info("Evaluating quantum model")
+            
+            # Apply quantum enhancements to the model for evaluation
+            model = update_entangled_interference_layer(model)
+            
             loss_fn = nn.CrossEntropyLoss()
             metrics = evaluate(model, eval_loader, loss_fn, fp16=torch.cuda.is_available())
             logger.info("Evaluation results:")
@@ -2184,12 +2264,21 @@ def main(mode="train", use_hyperopt=False, generation_examples=True, load_checkp
                 logger.info(f"  {key}: {value:.4f}")
         
         elif mode == "generate":
-            logger.info("Running text generation examples")
+            logger.info("Running text generation with quantum model")
+            
+            # Apply quantum enhancements to the model for generation
+            model = update_entangled_interference_layer(model)
+            
+            # For generation, enable memory operations
+            if hasattr(model, 'enable_training_memory'):
+                model.enable_training_memory(True)
+                logger.info("Memory operations enabled for generation")
+            
             prompts = [
-                "Semantic fields create",
-                "The quantum properties of language allow",
-                "In the future, AI will",
-                "The relationship between consciousness and computation is"
+                "Quantum entanglement suggests that",
+                "The nature of consciousness might be explained by",
+                "When we think about semantic fields, we consider",
+                "The relationship between language and thought involves"
             ]
             
             for prompt in prompts:
@@ -2197,17 +2286,17 @@ def main(mode="train", use_hyperopt=False, generation_examples=True, load_checkp
                 try:
                     generated = generate_text(
                         model, tokenizer, prompt, max_length=100, 
-                        temperature=0.8, top_p=0.9, top_k=50
+                        temperature=0.85, top_p=0.92, top_k=40  # Slightly more randomness for quantum
                     )
-                    logger.info("Generated text (temperature=0.8):")
+                    logger.info("Generated text (temperature=0.85):")
                     for text in generated:
                         logger.info(text)
                     
                     generated_beam = generate_text(
                         model, tokenizer, prompt, max_length=100,
-                        temperature=0.7, beam_size=3
+                        temperature=0.7, beam_size=4  # Increased beam size
                     )
-                    logger.info("\nGenerated text (beam search, beam_size=3):")
+                    logger.info("\nGenerated text (beam search, beam_size=4):")
                     for text in generated_beam:
                         logger.info(text)
                 except Exception as e:
@@ -2215,12 +2304,20 @@ def main(mode="train", use_hyperopt=False, generation_examples=True, load_checkp
                     logger.exception("Stack trace:")
         
         elif mode == "explain":
-            logger.info("Running model explainability tools")
+            logger.info("Running quantum model explainability analysis")
+            
+            # Apply quantum enhancements to the model for explainability
+            model = update_entangled_interference_layer(model)
+            
             explainer = ExplainabilityTools(model, tokenizer)
+            
+            # Enable memory for explainability
+            if hasattr(model, 'enable_training_memory'):
+                model.enable_training_memory(True)
             
             # Analyze model parameters
             model_info = explainer.explain_model_parameters()
-            logger.info("Model parameter analysis:")
+            logger.info("Quantum model parameter analysis:")
             logger.info(f"Total parameters: {model_info['parameters']['total']:,}")
             logger.info(f"Trainable parameters: {model_info['parameters']['trainable']:,}")
             
@@ -2230,20 +2327,28 @@ def main(mode="train", use_hyperopt=False, generation_examples=True, load_checkp
                 logger.info(f"Imaginary norm mean: {model_info['embedding']['imag_norm_mean']:.4f}")
                 logger.info(f"Real/Imaginary ratio: {model_info['embedding']['ratio_mean']:.4f}")
             
-            # Visualize attention
-            sample_text = "The quantum properties of language emerge through semantic interference."
-            logger.info(f"\nVisualizing attention for input: '{sample_text}'")
+            if 'entanglement' in model_info:
+                logger.info("\nEntanglement analysis:")
+                for name, metrics in model_info['entanglement'].items():
+                    logger.info(f"{name}:")
+                    logger.info(f"  Max eigenvalue: {metrics['max_eigenvalue']:.4f}")
+                    logger.info(f"  Min eigenvalue: {metrics['min_eigenvalue']:.4f}")
+                    logger.info(f"  Trace: {metrics['trace']:.4f}")
+            
+            # Visualize attention with quantum-specific prompts
+            sample_text = "Quantum interference patterns emerge when multiple possibilities exist simultaneously."
+            logger.info(f"\nVisualizing quantum attention for input: '{sample_text}'")
             attention_maps = explainer.visualize_attention(sample_text)
             
-            # Analyze generation process
-            sample_prompt = "Semantic fields interact through"
-            logger.info(f"\nAnalyzing generation process for prompt: '{sample_prompt}'")
+            # Analyze generation process with quantum-focused prompt
+            sample_prompt = "The quantum nature of language suggests"
+            logger.info(f"\nAnalyzing quantum generation process for prompt: '{sample_prompt}'")
             try:
                 generated_text, token_explanations, _ = explainer.analyze_generation(
-                    sample_prompt, max_length=20
+                    sample_prompt, max_length=30, temperature=0.85
                 )
                 logger.info(f"Generated text: {generated_text}")
-                logger.info("\nToken-by-token explanation:")
+                logger.info("\nToken-by-token quantum explanation:")
                 for i, explanation in enumerate(token_explanations):
                     token = explanation["token"]
                     prob = explanation["probability"]
@@ -2254,19 +2359,19 @@ def main(mode="train", use_hyperopt=False, generation_examples=True, load_checkp
                         logger.info(f"  Importance: {explanation['importance']:.4f}")
                     logger.info("")
             except Exception as e:
-                logger.error(f"Error during generation analysis: {str(e)}")
+                logger.error(f"Error during quantum generation analysis: {str(e)}")
                 logger.exception("Stack trace:")
         
         else:
             logger.info(f"Unknown mode: {mode}")
         
-        logger.info("Done!")
+        logger.info("Quantum SFIN processing complete!")
     
     except Exception as e:
         logger.error(f"Error in main function: {str(e)}")
         logger.exception("Stack trace:")
         raise
-
+        
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Advanced SFIN Training and Evaluation")
